@@ -1,0 +1,147 @@
+# Basic sensitivity analysis
+library(dplyr)
+library(FME)
+library(tidyr)
+library(ggplot2)
+library(relaimpo)
+
+# Millenial setup
+
+#Read in input data - Described in Table A1 of Abramoff et al. (2021)
+##forc_st: soil temperature in degrees Celcius
+##forc_sw: volumetric soil moisture in mm3/mm3
+##forc_npp: daily plant inputs in gC/m2/day
+inputdata <- read.table("./input/model input/globalaverage.txt")
+names(inputdata) <- c("forc_st","forc_sw","forc_npp")
+
+#Read in parameters - Described in Table A1 of Abramoff et al. (2021)
+parameters.file <- read.table("./input/model input/soilpara_in_fit.txt")
+parameters <- as.list(parameters.file$V2)
+names(parameters) <- parameters.file$V1
+
+#Read in functions
+source("./functions/run_functions.R") #R script that contains calls to run model
+source("./functions/derivs_V2_MM.R") #The official version of Millennial V2
+
+# Create a runlist to vary select parameters
+generate_params <- function(run_numbers){
+  nruns <- length(run_numbers)
+  tibble(
+    run_number = run_numbers,
+    param_pH = rnorm(n = nruns, mean = 5.3, sd = 0.53), #pH, adjusted to average of site values
+    param_bulkd = rnorm(n = nruns, mean = 1000, sd = 100), #bulk density in kg soil m-3
+    param_pc = rnorm(n = nruns, mean = 0.86, sd = 0.086), #slope of mineral C - clay relationship from Georgiou et al. in review
+    param_claysilt = rnorm(n = nruns, mean = 80, sd = 8)
+  )
+}
+
+# Generate 1000 unique runs
+runs <- c(1:1000)
+runlist <- as.list(generate_params(runs))
+
+# Function to create vectors for all the existing fixed parameters
+params_fixed <- list()
+for(p in names(parameters)){
+  params_fixed[[p]] <- rep_len(parameters[[p]], length.out = length(runs))
+}
+
+# Combine the two lists
+runlist_final <- c(runlist, params_fixed)
+
+# Run the model
+output <- list()
+for(r in 1:length(runs)){
+  params <- lapply(runlist_final[-1], `[`, r)
+
+  output[[r]] <- as.data.frame(Run_Model(inputdata,
+                           derivs_V2_MM,
+                           params,
+                           num.years=1,
+                           state=c(POM = 1, LMWC = 1, AGG = 1, MIC = 1, MAOM=1, CO2=0)))
+
+  # Assign run number column
+  output[[r]]$run_number <- r
+
+}
+
+# Combine data
+model_output <- bind_rows(output) %>% as_tibble()
+
+# Plot just the model outputs
+model_output %>%
+  pivot_longer(cols = c(POM, LMWC, AGG, MIC, MAOM, CO2),
+               names_to = "metric",
+               values_to = "values") %>%
+  ggplot(aes(x = time, y = values, color = metric)) +
+  geom_line() +
+  facet_wrap(~metric, scales = "free_y") +
+  scale_color_brewer(palette = "BrBG") +
+  theme_bw()
+
+# Calculate relative importance
+# Define function
+calc_relimp <- function(x) {
+
+    t <- x$time # record time...
+    x$time <- NULL # and drop time column
+    run <- x$run_number[1] # record run number
+    x$run_number <- NULL # drop run number column
+    n <- x$name # record parameter name
+    x$name <- NULL # and drop
+
+    # Fit model. The formula notation means "CO2 as a
+    # function of all other terms" (which is why we dropped year)
+    lin <- lm(param ~ ., data = x)
+
+    # Calculate relative importance metrics and extract 'lmg' results
+    # 'lmg' is the R^2 contribution averaged over orderings among regressors;
+    # should sum to one because we're using relative importances (rela=TRUE)
+    # try()
+    relimp <- try(calc.relimp(lin, type = "lmg", rela = TRUE)@lmg)
+    if(class(relimp) == "try-error") {
+      message(t, " calc.relimp error")
+      return(NULL)
+    }
+
+    # Return a data frame: year, parameter, relative importance
+    tibble(time = unique(t),
+           output = names(relimp),
+           value = relimp,
+           source = n[1])
+}
+
+# Create dataframe to pass to relative importance function
+importance_test <- model_output %>%
+  left_join(bind_rows(runlist), by = "run_number")
+
+# Loop through each row of the data (except for the first day, where
+# outputs = 1 and 0 - note this can be changed in the "run model" function)
+# We want to look at all of the outputs, define here to loop through
+out_params <- c("POM", "LMWC", "AGG", "MIC", "MAOM", "CO2")
+
+out <- list()
+for(p in out_params){
+  importance_test_filter <- importance_test %>%
+    dplyr::select(c(run_number, time, p, names(runlist[2:5]))) %>%
+    rename(param = p) %>%
+    mutate(name = p)
+  # Split the data up by day to calculate variance for each timestep
+  imp <- split(importance_test_filter, list(importance_test_filter$time))
+  out[[p]] <- lapply(imp[-1], FUN = calc_relimp) %>% bind_rows()
+}
+
+# Plot relative importance
+bind_rows(out) %>%
+  ggplot(aes(x = time, y = value, fill = output)) +
+  geom_area() +
+  facet_wrap(~source) +
+  labs(x = "Timestep",
+       y = "Relative importance on total CO2",
+       fill = "Parameter") +
+  coord_cartesian(ylim = c(0.5, 1.0)) +
+  scale_fill_manual(values = pals::brewer.set2(n = 5)) +
+  theme_bw()
+
+
+
+
