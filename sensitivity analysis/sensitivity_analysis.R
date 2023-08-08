@@ -67,16 +67,31 @@ for(r in 1:length(runs)){
 # Combine data
 model_output <- bind_rows(output) %>% as_tibble()
 
-# Plot just the model outputs
-model_output %>%
+# Plot just the model outputs as a ribbon plot
+# Clean up data
+ribbon_plot_data <- model_output %>%
   pivot_longer(cols = c(POM, LMWC, AGG, MIC, MAOM, CO2),
                names_to = "metric",
                values_to = "values") %>%
-  ggplot(aes(x = time, y = values, color = metric)) +
-  geom_line() +
+  group_by(time, metric) %>%
+  summarize(sd = sd(values),
+            min = min(values),
+            max = max(values),
+            median = median(values))
+
+# Plot
+ribbon_plot <- ribbon_plot_data %>%
+  ggplot(aes(x = time, fill = metric)) +
+  geom_ribbon(aes(ymin = min, ymax = max),  alpha = 0.5) +
+  geom_line(aes(y = median, color = metric), linewidth = 1) +
   facet_wrap(~metric, scales = "free_y") +
   scale_color_brewer(palette = "BrBG") +
-  theme_bw()
+  scale_fill_brewer(palette = "BrBG") +
+  labs(x = "Time (days)",
+       y = "Units?") +
+  theme_bw() ; ribbon_plot
+
+ggsave(plot = ribbon_plot, "./figures/model_outputs.jpg", height = 6, width = 9, units = "in")
 
 # Calculate relative importance
 # Define function
@@ -131,17 +146,33 @@ for(p in out_params){
 }
 
 # Plot relative importance
-bind_rows(out) %>%
+relaimpo_plot <- bind_rows(out) %>%
   ggplot(aes(x = time, y = value, fill = output)) +
   geom_area() +
   facet_wrap(~source) +
   labs(x = "Timestep",
-       y = "Relative importance on total CO2",
+       y = "Relative importance for total CO2",
        fill = "Parameter") +
-  coord_cartesian(ylim = c(0.5, 1.0)) +
+  # Adjust the zoom as needed - need to zoom out with longer runs
+  coord_cartesian(ylim = c(0.95, 1.0)) +
   scale_fill_manual(values = pals::brewer.set2(n = 5)) +
-  theme_bw()
+  theme_bw() ; relaimpo_plot
 
+ggsave(plot = relaimpo_plot, "./figures/relative_importance.jpg", height = 6, width = 9, units = "in")
 
+# Plot relative importance of soil moisture
+# We don't vary soil moisture, since it's read in as an input
+# How to set this up?
+# Steps:
+# 1. use cut or something similar to divide the data into 20 (or whatever)
+#    different bins of soil moisture, i.e. create a new column sm_group
+# 2. run calc_relimp on each bin, but also calculating average SM for each bin
+# 3. combine and plots mean soil moisture versus importance
+soil_moisture <- inputdata %>%
+  dplyr::select(moisture = forc_sw) %>%
+  mutate(time = 1:365,
+         sm_group = cut(moisture, 20)) %>%
+  group_by(sm_group) %>%
+  mutate(mean_sm_group = mean(moisture))
 
 
