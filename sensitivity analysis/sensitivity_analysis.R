@@ -7,6 +7,10 @@ library(relaimpo)
 
 # Millenial setup
 
+# Define constants
+NUM_YEARS <- 5
+NUM_RUNS <- 1000
+
 #Read in input data - Described in Table A1 of Abramoff et al. (2021)
 ##forc_st: soil temperature in degrees Celcius
 ##forc_sw: volumetric soil moisture in mm3/mm3
@@ -36,7 +40,7 @@ generate_params <- function(run_numbers){
 }
 
 # Generate 1000 unique runs
-runs <- c(1:1000)
+runs <- c(1:NUM_RUNS)
 runlist <- as.list(generate_params(runs))
 
 # Function to create vectors for all the existing fixed parameters
@@ -56,7 +60,7 @@ for(r in 1:length(runs)){
   output[[r]] <- as.data.frame(Run_Model(inputdata,
                            derivs_V2_MM,
                            params,
-                           num.years=1,
+                           num.years=NUM_YEARS,
                            state=c(POM = 1, LMWC = 1, AGG = 1, MIC = 1, MAOM=1, CO2=0)))
 
   # Assign run number column
@@ -154,25 +158,36 @@ relaimpo_plot <- bind_rows(out) %>%
        y = "Relative importance for total CO2",
        fill = "Parameter") +
   # Adjust the zoom as needed - need to zoom out with longer runs
-  coord_cartesian(ylim = c(0.95, 1.0)) +
+  coord_cartesian(ylim = c(0.65, 1.0)) +
   scale_fill_manual(values = pals::brewer.set2(n = 5)) +
   theme_bw() ; relaimpo_plot
 
 ggsave(plot = relaimpo_plot, "./figures/relative_importance.jpg", height = 6, width = 9, units = "in")
 
-# Plot relative importance of soil moisture
-# We don't vary soil moisture, since it's read in as an input
-# How to set this up?
-# Steps:
-# 1. use cut or something similar to divide the data into 20 (or whatever)
-#    different bins of soil moisture, i.e. create a new column sm_group
-# 2. run calc_relimp on each bin, but also calculating average SM for each bin
-# 3. combine and plots mean soil moisture versus importance
+# Plot relative importance vs soil moisture
 soil_moisture <- inputdata %>%
   dplyr::select(moisture = forc_sw) %>%
   mutate(time = 1:365,
-         sm_group = cut(moisture, 20)) %>%
+         sm_group = cut(moisture, 25)) %>%
   group_by(sm_group) %>%
-  mutate(mean_sm_group = mean(moisture))
+  mutate(mean_sm_group = mean(moisture)) %>%
+  left_join(bind_rows(out), by = c("time")) %>%
+  filter(time != 1)
+
+# Plot
+soil_importance_plot <- soil_moisture %>%
+  ggplot(aes(mean_sm_group, value, fill = output)) +
+  geom_area() +
+  facet_wrap(~source) +
+  labs(x = "Soil moisture",
+       y = "Relative importance for total CO2",
+       fill = "Parameter") +
+  coord_cartesian(ylim = c(0.95, 1.0)) +
+  scale_fill_manual(values = pals::brewer.set2(n = 5)) +
+  theme_bw() ; soil_importance_plot
+
+ggsave(plot = soil_importance_plot, "./figures/soil_moisture_relaimpo.jpg", height = 6, width = 9, units = "in")
+
+
 
 
