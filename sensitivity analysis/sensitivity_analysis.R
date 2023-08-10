@@ -11,7 +11,7 @@ library(relaimpo)
 
 # Define constants
 NUM_YEARS <- 1
-NUM_RUNS <- 1000
+NUM_RUNS <- 100
 
 # Read in input data - Described in Table A1 of Abramoff et al. (2021)
 ## forc_st: soil temperature in degrees Celcius

@@ -2,3 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# Output graphics files
+*.jpg
