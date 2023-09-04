@@ -1,4 +1,6 @@
 # Basic sensitivity analysis
+# Leeya Pressburger 2023
+
 library(dplyr)
 library(FME)
 library(tidyr)
@@ -8,39 +10,39 @@ library(relaimpo)
 # Millenial setup
 
 # Define constants
-NUM_YEARS <- 5
-NUM_RUNS <- 1000
+NUM_YEARS <- 1
+NUM_RUNS <- 100
 
-#Read in input data - Described in Table A1 of Abramoff et al. (2021)
-##forc_st: soil temperature in degrees Celcius
-##forc_sw: volumetric soil moisture in mm3/mm3
-##forc_npp: daily plant inputs in gC/m2/day
+# Read in input data - Described in Table A1 of Abramoff et al. (2021)
+## forc_st: soil temperature in degrees Celcius
+## forc_sw: volumetric soil moisture in mm3/mm3
+## forc_npp: daily plant inputs in gC/m2/day
 inputdata <- read.table("./input/model input/globalaverage.txt")
 names(inputdata) <- c("forc_st","forc_sw","forc_npp")
 
-#Read in parameters - Described in Table A1 of Abramoff et al. (2021)
+# Read in parameters - Described in Table A1 of Abramoff et al. (2021)
 parameters.file <- read.table("./input/model input/soilpara_in_fit.txt")
 parameters <- as.list(parameters.file$V2)
 names(parameters) <- parameters.file$V1
 
-#Read in functions
-source("./functions/run_functions.R") #R script that contains calls to run model
-source("./functions/derivs_V2_MM.R") #The official version of Millennial V2
+# Read in functions
+source("./functions/run_functions.R") # R script that contains calls to run model
+source("./functions/derivs_V2_MM.R") # The official version of Millennial V2
 
 # Create a runlist to vary select parameters
 generate_params <- function(run_numbers){
   nruns <- length(run_numbers)
   tibble(
     run_number = run_numbers,
-    param_pH = rnorm(n = nruns, mean = 5.3, sd = 0.53), #pH, adjusted to average of site values
-    param_bulkd = rnorm(n = nruns, mean = 1000, sd = 100), #bulk density in kg soil m-3
-    param_pc = rnorm(n = nruns, mean = 0.86, sd = 0.086), #slope of mineral C - clay relationship from Georgiou et al. in review
-    param_claysilt = rnorm(n = nruns, mean = 80, sd = 8)
+    param_pH = rnorm(n = nruns, mean = 5.3, sd = 0.53), # pH, adjusted to average of site values
+    param_bulkd = rnorm(n = nruns, mean = 1000, sd = 100), # bulk density in kg soil m-3
+    param_pc = rnorm(n = nruns, mean = 0.86, sd = 0.086), # slope of mineral C - clay relationship from Georgiou et al. in review
+    param_claysilt = rnorm(n = nruns, mean = 80, sd = 8)  # clay and silt content in %
   )
 }
 
 # Generate 1000 unique runs
-runs <- c(1:NUM_RUNS)
+runs <- 1:NUM_RUNS
 runlist <- as.list(generate_params(runs))
 
 # Function to create vectors for all the existing fixed parameters
@@ -54,18 +56,26 @@ runlist_final <- c(runlist, params_fixed)
 
 # Run the model
 output <- list()
-for(r in 1:length(runs)){
-  params <- lapply(runlist_final[-1], `[`, r)
+for(r in runs){
+  # To access parameter values:
+  # First, we want to drop the run number, so we pass in runlist_final[-1] to
+  # remove the first element of the list.
+  # Then, we need to access the list of parameter values for each run.
+  # We can extract this from the list by looping through each run number and
+  # pulling out that column from each list element. i.e., the first column
+  # corresponds to run 1, second column to run 2, etc.
+  params <- lapply(runlist_final[-1], `[`, r) # could also use mapply for this
 
+  # Run Millenial
   output[[r]] <- as.data.frame(Run_Model(inputdata,
                            derivs_V2_MM,
                            params,
-                           num.years=NUM_YEARS,
-                           state=c(POM = 1, LMWC = 1, AGG = 1, MIC = 1, MAOM=1, CO2=0)))
+                           num.years = NUM_YEARS,
+                           # This can be adjusted to run a steady state
+                           state = c(POM = 1, LMWC = 1, AGG = 1, MIC = 1, MAOM = 1, CO2 = 0)))
 
-  # Assign run number column
+  # Re-assign run number column now that the model has run
   output[[r]]$run_number <- r
-
 }
 
 # Combine data
@@ -115,37 +125,41 @@ calc_relimp <- function(x) {
     # Calculate relative importance metrics and extract 'lmg' results
     # 'lmg' is the R^2 contribution averaged over orderings among regressors;
     # should sum to one because we're using relative importances (rela=TRUE)
-    # try()
+    # If the function can't solve, return a try error and continue running
     relimp <- try(calc.relimp(lin, type = "lmg", rela = TRUE)@lmg)
     if(class(relimp) == "try-error") {
       message(t, " calc.relimp error")
       return(NULL)
     }
 
-    # Return a data frame: year, parameter, relative importance
+    # Return a data frame: time, parameter, relative importance
     tibble(time = unique(t),
            output = names(relimp),
            value = relimp,
            source = n[1])
 }
 
-# Create dataframe to pass to relative importance function
+# Create a dataframe to pass to relative importance function
 importance_test <- model_output %>%
   left_join(bind_rows(runlist), by = "run_number")
 
-# Loop through each row of the data (except for the first day, where
-# outputs = 1 and 0 - note this can be changed in the "run model" function)
 # We want to look at all of the outputs, define here to loop through
 out_params <- c("POM", "LMWC", "AGG", "MIC", "MAOM", "CO2")
 
+# Create a list to store results
 out <- list()
 for(p in out_params){
+  # Isolate one output at a time and get only the parameters we vary
   importance_test_filter <- importance_test %>%
-    dplyr::select(c(run_number, time, p, names(runlist[2:5]))) %>%
+    dplyr::select(c(run_number, time, p, starts_with("param_"))) %>%
+    # Rename the param column to the output variable of interest...
     rename(param = p) %>%
+    # ...and create a new column to preserve its name
     mutate(name = p)
   # Split the data up by day to calculate variance for each timestep
   imp <- split(importance_test_filter, list(importance_test_filter$time))
+  # (except for the first day, where outputs = 1 and 0;
+  # note this can be changed in the "run model" function)
   out[[p]] <- lapply(imp[-1], FUN = calc_relimp) %>% bind_rows()
 }
 
@@ -186,8 +200,5 @@ soil_importance_plot <- soil_moisture %>%
   scale_fill_manual(values = pals::brewer.set2(n = 5)) +
   theme_bw() ; soil_importance_plot
 
-ggsave(plot = soil_importance_plot, "./figures/soil_moisture_relaimpo.jpg", height = 6, width = 9, units = "in")
-
-
-
-
+ggsave(plot = soil_importance_plot, "./figures/soil_moisture_relaimpo.jpg",
+       height = 6, width = 9, units = "in")
