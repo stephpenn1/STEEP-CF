@@ -20,6 +20,18 @@ NUM_RUNS <- 100
 inputdata <- read.table("./input/model input/globalaverage.txt")
 names(inputdata) <- c("forc_st","forc_sw","forc_npp")
 
+# Plot forcing data
+inputdata %>%
+  mutate(Day = 1:365) %>%
+  pivot_longer(-Day) %>%
+  ggplot(aes(Day, value, color = name)) +
+  geom_line() +
+  facet_wrap(~name, scales = "free") ->
+  forcing_plot
+print(forcing_plot)
+ggsave("./figures/forcing.jpg", height = 6, width = 9)
+
+
 # Read in parameters - Described in Table A1 of Abramoff et al. (2021)
 parameters.file <- read.table("./input/model input/soilpara_in_fit.txt")
 parameters <- as.list(parameters.file$V2)
@@ -91,7 +103,8 @@ ribbon_plot_data <- model_output %>%
   summarize(sd = sd(values),
             min = min(values),
             max = max(values),
-            median = median(values))
+            median = median(values),
+            .groups = "drop")
 
 # Plot
 ribbon_plot <- ribbon_plot_data %>%
@@ -105,7 +118,7 @@ ribbon_plot <- ribbon_plot_data %>%
        y = "Units?") +
   theme_bw() ; ribbon_plot
 
-ggsave(plot = ribbon_plot, "./figures/model_outputs.jpg", height = 6, width = 9, units = "in")
+ggsave("./figures/model_outputs.jpg", height = 6, width = 9)
 
 # Calculate relative importance
 # Define function
@@ -176,7 +189,7 @@ relaimpo_plot <- bind_rows(out) %>%
   scale_fill_manual(values = pals::brewer.set2(n = 5)) +
   theme_bw() ; relaimpo_plot
 
-ggsave(plot = relaimpo_plot, "./figures/relative_importance.jpg", height = 6, width = 9, units = "in")
+ggsave("./figures/relative_importance.jpg", height = 6, width = 9)
 
 # Plot relative importance vs soil moisture
 soil_moisture <- inputdata %>%
@@ -200,5 +213,4 @@ soil_importance_plot <- soil_moisture %>%
   scale_fill_manual(values = pals::brewer.set2(n = 5)) +
   theme_bw() ; soil_importance_plot
 
-ggsave(plot = soil_importance_plot, "./figures/soil_moisture_relaimpo.jpg",
-       height = 6, width = 9, units = "in")
+ggsave("./figures/soil_moisture_relaimpo.jpg", height = 6, width = 9)
