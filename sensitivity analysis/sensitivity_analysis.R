@@ -5,6 +5,7 @@ library(dplyr)
 library(FME)
 library(tidyr)
 library(ggplot2)
+theme_set(theme_bw())
 library(relaimpo)
 
 # Millenial setup
@@ -26,7 +27,9 @@ inputdata %>%
   pivot_longer(-Day) %>%
   ggplot(aes(Day, value, color = name)) +
   geom_line() +
-  facet_wrap(~name, scales = "free") ->
+  facet_wrap(~name, scales = "free") +
+  # vertical lines show with NPP starts and stops
+  geom_vline(xintercept = c(168, 260), linetype = 2) ->
   forcing_plot
 print(forcing_plot)
 ggsave("./figures/forcing.jpg", height = 6, width = 9)
@@ -46,7 +49,7 @@ generate_params <- function(run_numbers){
   nruns <- length(run_numbers)
   tibble(
     run_number = run_numbers,
-    param_pH = rnorm(n = nruns, mean = 5.3, sd = 0.53), # pH, adjusted to average of site values
+    param_pH = rnorm(n = nruns, mean = 5.3, sd = 0.053), # pH, adjusted to average of site values
     param_bulkd = rnorm(n = nruns, mean = 1000, sd = 100), # bulk density in kg soil m-3
     param_pc = rnorm(n = nruns, mean = 0.86, sd = 0.086), # slope of mineral C - clay relationship from Georgiou et al. in review
     param_claysilt = rnorm(n = nruns, mean = 80, sd = 8)  # clay and silt content in %
@@ -116,6 +119,8 @@ ribbon_plot <- ribbon_plot_data %>%
   scale_fill_brewer(palette = "BrBG") +
   labs(x = "Time (days)",
        y = "Units?") +
+  # vertical lines show with NPP starts and stops
+  geom_vline(xintercept = c(168, 260), linetype = 2) +
   theme_bw() ; ribbon_plot
 
 ggsave("./figures/model_outputs.jpg", height = 6, width = 9)
@@ -187,6 +192,8 @@ relaimpo_plot <- bind_rows(out) %>%
   # Adjust the zoom as needed - need to zoom out with longer runs
   coord_cartesian(ylim = c(0.65, 1.0)) +
   scale_fill_manual(values = pals::brewer.set2(n = 5)) +
+  # vertical lines show with NPP starts and stops
+  geom_vline(xintercept = c(168, 260), linetype = 2) +
   theme_bw() ; relaimpo_plot
 
 ggsave("./figures/relative_importance.jpg", height = 6, width = 9)
