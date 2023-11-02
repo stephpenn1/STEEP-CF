@@ -18,7 +18,6 @@ library(terra)
 library(terra)
 library(luna)
 
-# Files downloaded 2023-11-02 from NASA EarthData
 # I selected a single point, the coordinates of the NEON tower
 # 38.890131, -76.560014
 product <- "MOD17A2H" # MOD17A3HGF
@@ -63,10 +62,11 @@ for(f in sort(files)) {
   gpp <- r[["Gpp_500m"]]
   # Rescale and 'clamp' the values, based on documentation:
   # https://lpdaac.usgs.gov/products/myd17a2hv061/
-  gpp_clamp <- clamp(gpp / 0.0001, lower = 0, upper = 30000, values = FALSE)
-  gpp_mean <- mean(values(gpp_clamp), na.rm = TRUE) # kgC/m2
+  gpp_clamp <- clamp(gpp / 0.0001, lower = 0, upper = 30000, values = FALSE) * 0.0001
+  # Compute mean in gC/m2
+  gpp_mean <- mean(values(gpp_clamp), na.rm = TRUE) * 1000 # gC/m2
   res[[f]] <- data.frame(filename = basename(f),
-                            GPP = gpp_mean)
+                         GPP = gpp_mean)
 }
 
 results <- do.call(rbind, res)
@@ -89,10 +89,19 @@ library(tidyr)
 results %>%
   separate(filename,
            into = c("product", "jdoa", "ti", "cv", "jdop", "df"),
-          sep = "\\.") ->
-  x
+           sep = "\\.") ->
+  gpp
 
+gpp$year <- as.integer(substr(gpp$jdoa, 2, 5))
+gpp$day <- as.integer(substr(gpp$jdoa, 6, 8))
+gpp <- gpp[gpp$year == 2022,]
 
+# MODIS GPP is an 8-day product. Convert to daily GPP
+gpp$daily_GPP <- gpp$GPP / 8
 
-
+# Interpolate to every day for the entire year
+gpp_interp <- data.frame(day = 1:365,
+                         GPP = approx(gpp$day,
+                                      gpp$daily_GPP,
+                                      xout = 1:365, rule = 2)$y)
 
