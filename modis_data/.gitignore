@@ -1,0 +1,5 @@
+# HDF files downloaded from NASA
+*.hdf
+
+# NASA EarthData login info
+earthdata_credentials
