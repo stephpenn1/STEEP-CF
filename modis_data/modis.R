@@ -20,10 +20,11 @@ library(luna)
 
 # Files downloaded 2023-11-02 from NASA EarthData
 # I selected a single point, the coordinates of the NEON tower
+# 38.890131, -76.560014
 product <- "MOD17A2H" # MOD17A3HGF
 start <- "2022-01-01"
 end <- "2022-12-31"
-aoi <- ext(-76.57, -76.55, 38.88, 38.90)
+aoi <- ext(-76.560014, -76.560014, 38.890131, 38.890131)
 
 tiles <- luna::getModis(product,
                         start, end, aoi = aoi,
