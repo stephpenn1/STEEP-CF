@@ -1,6 +1,14 @@
+# Compute daily NPP for running Millenial
+# We're interested in the TEMPEST site; currently using lat/lon
+# of the NEON tower and not cropping the resulting tiles, so we're
+# actually computing mean GPP and NPP for a slice of land that includes
+# the tower but also out to the Atlantic coast
+# We can improve/fix this later
+# BBL November 2023
+
+message("Welcome to modis.R")
 
 library(terra)
-
 
 # SDS Name: Gpp_500m
 # Description: Gross Primary Productivity
@@ -10,7 +18,6 @@ library(terra)
 # No Data Value: N/A
 # Valid Range: 0 to 30000
 # Scale Factor: 0.0001
-
 
 # https://rspatial.org/modis/4-quality.html
 
@@ -34,7 +41,12 @@ tiles <- luna::getModis(product,
 # saveRDS(earthdata, file = "modis_data/earthdata_credentials")
 
 # Read in the credentials file so we can log in and download
-earthdata <- readRDS("modis_data/earthdata_credentials")
+credfile <- "modis_data/earthdata_credentials.RDS"
+if(file.exists(credfile)) {
+  earthdata <- readRDS(credfile)
+} else {
+  stop("No credentials for downloading! See comments")
+}
 
 mf <- luna::getModis(product,
                      start, end, aoi = aoi,
@@ -44,6 +56,10 @@ mf <- luna::getModis(product,
                      password = earthdata$password)
 
 # Quality screening, following https://rspatial.org/modis/4-quality.html
+
+# TODO
+
+# Cropping
 
 # TODO
 
@@ -84,7 +100,6 @@ rownames(results) <- NULL
 # 2023082164002 - Julian Date of Production (YYYYDDDHHMMSS)
 # .hdf - Data Format (HDF-EOS)
 
-
 library(tidyr)
 results %>%
   separate(filename,
@@ -105,3 +120,34 @@ gpp_interp <- data.frame(day = 1:365,
                                       gpp$daily_GPP,
                                       xout = 1:365, rule = 2)$y)
 
+
+# NPP
+
+# SDS Name: Npp_500m
+# Description: Net Primary Productivity
+# Units: kg C/m²/yr
+# 16-bit signed integer
+# Fill Value: 32761 to 32767
+# No Data Value: N/A
+# Valid Range: -30000 to 32700
+# Scale Factor: 0.0001
+
+# NPP tile download 2023-11-02 from NASA Earthdata
+# MOD17A3HGF.A2022001.h12v05.061.2023035051756.hdf
+files <- list.files("modis_data/",
+                    pattern = "^MOD17A3HGF.*hdf$",
+                    full.names = TRUE)
+stopifnot(length(files) == 1)
+
+message("Processing ", files[1])
+r <- rast(files[1])
+
+npp <- r[["Npp_500m"]]
+npp_clamp <- clamp(npp / 0.0001, lower = -30000, upper = 32700, values = FALSE) * 0.0001
+npp_mean <- mean(values(npp_clamp), na.rm = TRUE) * 1000 # gC/m2
+
+# Scale the annual NPP by the GPP curve, assuming a fixed ratio
+gpp_interp$NPP <- npp_mean * gpp_interp$GPP / sum(gpp_interp$GPP)
+
+write.csv(gpp_interp, "modis_data/modis_gpp_npp_2022.csv")
+message("All done")

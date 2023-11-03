@@ -1,5 +1,7 @@
 # HDF files downloaded from NASA
-*.hdf
+MOD17A2H*.hdf
+# Since the NPP file (MOD17A3HGF...) was manually downloaded, commit it,
+# but not the GPP files
 
 # NASA EarthData login info
-earthdata_credentials
+earthdata_credentials.RDS
