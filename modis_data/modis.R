@@ -8,8 +8,6 @@
 
 message("Welcome to modis.R")
 
-library(terra)
-
 # SDS Name: Gpp_500m
 # Description: Gross Primary Productivity
 # Units: kg C/m²
@@ -30,30 +28,43 @@ library(luna)
 product <- "MOD17A2H" # MOD17A3HGF
 start <- "2022-01-01"
 end <- "2022-12-31"
-aoi <- ext(-76.560014, -76.560014, 38.890131, 38.890131)
+aoi <- ext(-76.57, -76.56, 38.89, 38.90) # roughly 1 km2 around tower
+aoi_vect <- terra::vect(aoi)
+# EPSG:4326 - WGS 84 is lat/lon coordinate system used by GPS and others
+crs(aoi_vect) <- "epsg:4326"
+message("Extract area is ",
+        sprintf("%4.2f", terra::expanse(aoi_vect) / 1e6), " km2")
 
 tiles <- luna::getModis(product,
                         start, end, aoi = aoi,
                         download = FALSE)
 
-# Save a credentials file by
-# earthdata <- list(username = "...", password = "...")
-# saveRDS(earthdata, file = "modis_data/earthdata_credentials")
+message("This will require ", length(tiles), " tiles")
 
-# Read in the credentials file so we can log in and download
-credfile <- "modis_data/earthdata_credentials.RDS"
-if(file.exists(credfile)) {
-  earthdata <- readRDS(credfile)
+download <- FALSE
+if(download) {
+
+  # Save a credentials file by
+  # earthdata <- list(username = "...", password = "...")
+  # saveRDS(earthdata, file = "modis_data/earthdata_credentials")
+
+  # Read in the credentials file so we can log in and download
+  credfile <- "modis_data/earthdata_credentials.RDS"
+  if(file.exists(credfile)) {
+    earthdata <- readRDS(credfile)
+  } else {
+    stop("No credentials for downloading! See comments")
+  }
+
+  mf <- luna::getModis(product,
+                       start, end, aoi = aoi,
+                       download = TRUE,
+                       path = "./modis_data/",
+                       username = earthdata$username,
+                       password = earthdata$password)
 } else {
-  stop("No credentials for downloading! See comments")
+  message("Not downloading; hope everything is here")
 }
-
-mf <- luna::getModis(product,
-                     start, end, aoi = aoi,
-                     download = TRUE,
-                     path = "./modis_data/",
-                     username = earthdata$username,
-                     password = earthdata$password)
 
 # Quality screening, following https://rspatial.org/modis/4-quality.html
 
@@ -79,8 +90,14 @@ for(f in sort(files)) {
   # Rescale and 'clamp' the values, based on documentation:
   # https://lpdaac.usgs.gov/products/myd17a2hv061/
   gpp_clamp <- clamp(gpp / 0.0001, lower = 0, upper = 30000, values = FALSE) * 0.0001
+
+  # Make sure our area of interest (aoi) is in same coordinate
+  # system and then extract data
+  aoi_vect_trans <- project(aoi_vect, crs(gpp_clamp))
+  gpp_ex <- terra::extract(gpp_clamp, aoi_vect_trans)
+
   # Compute mean in gC/m2
-  gpp_mean <- mean(values(gpp_clamp), na.rm = TRUE) * 1000 # gC/m2
+  gpp_mean <- mean(gpp_ex$Gpp_500m, na.rm = TRUE) * 1000 # gC/m2
   res[[f]] <- data.frame(filename = basename(f),
                          GPP = gpp_mean)
 }
@@ -144,7 +161,14 @@ r <- rast(files[1])
 
 npp <- r[["Npp_500m"]]
 npp_clamp <- clamp(npp / 0.0001, lower = -30000, upper = 32700, values = FALSE) * 0.0001
-npp_mean <- mean(values(npp_clamp), na.rm = TRUE) * 1000 # gC/m2
+
+# Make sure our area of interest (aoi) is in same coordinate
+# system and then extract data
+aoi_vect_trans <- project(aoi_vect, crs(npp_clamp))
+npp_ex <- terra::extract(npp_clamp, aoi_vect_trans)
+
+npp_mean <- mean(npp_ex$Npp_500m, na.rm = TRUE) * 1000 # gC/m2
+message("NPP is ", npp_mean)
 
 # Scale the annual NPP by the GPP curve, assuming a fixed ratio
 gpp_interp$NPP <- npp_mean * gpp_interp$GPP / sum(gpp_interp$GPP)
