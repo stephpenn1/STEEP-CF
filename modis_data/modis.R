@@ -1,12 +1,31 @@
 # Compute daily NPP for running Millenial
-# We're interested in the TEMPEST site; currently using lat/lon
-# of the NEON tower and not cropping the resulting tiles, so we're
-# actually computing mean GPP and NPP for a slice of land that includes
-# the tower but also out to the Atlantic coast
-# We can improve/fix this later
+# We're interested in 2022 data for the TEMPEST site;
+# currently using lat/lon of the NEON tower and pulling
+# data for a roughly 1 km2 area around that.
+# See https://rspatial.org/modis/1-introduction.html
 # BBL November 2023
 
 message("Welcome to modis.R")
+
+# install.packages('luna', repos='https://rspatial.r-universe.dev')
+library(terra)
+library(luna)
+
+# Dates of interest
+start <- "2022-01-01"
+end <- "2022-12-31"
+
+# Area of interest
+# I selected a single point, the coordinates of the NEON tower
+# 38.890131, -76.560014, and then expand aoi slightly around it
+aoi <- ext(-76.57, -76.56, 38.89, 38.90) # roughly 1 km2 around tower
+aoi_vect <- terra::vect(aoi)
+# EPSG:4326 - WGS 84 is lat/lon coordinate system used by GPS and others
+crs(aoi_vect) <- "epsg:4326"
+message("Extract area is ",
+        sprintf("%4.2f", terra::expanse(aoi_vect) / 1e6), " km2")
+
+# GPP
 
 # SDS Name: Gpp_500m
 # Description: Gross Primary Productivity
@@ -16,24 +35,7 @@ message("Welcome to modis.R")
 # No Data Value: N/A
 # Valid Range: 0 to 30000
 # Scale Factor: 0.0001
-
-# https://rspatial.org/modis/4-quality.html
-
-# install.packages('luna', repos='https://rspatial.r-universe.dev')
-library(terra)
-library(luna)
-
-# I selected a single point, the coordinates of the NEON tower
-# 38.890131, -76.560014
-product <- "MOD17A2H" # MOD17A3HGF
-start <- "2022-01-01"
-end <- "2022-12-31"
-aoi <- ext(-76.57, -76.56, 38.89, 38.90) # roughly 1 km2 around tower
-aoi_vect <- terra::vect(aoi)
-# EPSG:4326 - WGS 84 is lat/lon coordinate system used by GPS and others
-crs(aoi_vect) <- "epsg:4326"
-message("Extract area is ",
-        sprintf("%4.2f", terra::expanse(aoi_vect) / 1e6), " km2")
+product <- "MOD17A2H"
 
 tiles <- luna::getModis(product,
                         start, end, aoi = aoi,
@@ -43,7 +45,6 @@ message("This will require ", length(tiles), " tiles")
 
 download <- FALSE
 if(download) {
-
   # Save a credentials file by
   # earthdata <- list(username = "...", password = "...")
   # saveRDS(earthdata, file = "modis_data/earthdata_credentials")
@@ -66,16 +67,7 @@ if(download) {
   message("Not downloading; hope everything is here")
 }
 
-# Quality screening, following https://rspatial.org/modis/4-quality.html
-
-# TODO
-
-# Cropping
-
-# TODO
-
-# Processing
-
+# Process downloaded files
 files <- list.files("modis_data/",
                     pattern = "^MOD17A2H.*hdf$",
                     full.names = TRUE)
@@ -92,11 +84,11 @@ for(f in sort(files)) {
   gpp_clamp <- clamp(gpp / 0.0001, lower = 0, upper = 30000, values = FALSE) * 0.0001
 
   # Make sure our area of interest (aoi) is in same coordinate
-  # system and then extract data
+  # system and then extract data for that region
   aoi_vect_trans <- project(aoi_vect, crs(gpp_clamp))
   gpp_ex <- terra::extract(gpp_clamp, aoi_vect_trans)
 
-  # Compute mean in gC/m2
+  # Compute mean in gC/m2 (per 8 day period)
   gpp_mean <- mean(gpp_ex$Gpp_500m, na.rm = TRUE) * 1000 # gC/m2
   res[[f]] <- data.frame(filename = basename(f),
                          GPP = gpp_mean)
@@ -105,7 +97,7 @@ for(f in sort(files)) {
 results <- do.call(rbind, res)
 rownames(results) <- NULL
 
-# Separate filename into more useful data. For the help page:
+# Separate filename into more useful data. From the help page:
 
 # In this example of a tiled product, the filename
 # MCD19A2.A2023081.h22v02.061.2023082164002.hdf indicates:
@@ -149,7 +141,8 @@ gpp_interp <- data.frame(day = 1:365,
 # Valid Range: -30000 to 32700
 # Scale Factor: 0.0001
 
-# NPP tile download 2023-11-02 from NASA Earthdata
+# NPP tile downloaded 2023-11-02 from NASA Earthdata
+# (it doesn't seem to be available through the luna package)
 # MOD17A3HGF.A2022001.h12v05.061.2023035051756.hdf
 files <- list.files("modis_data/",
                     pattern = "^MOD17A3HGF.*hdf$",
