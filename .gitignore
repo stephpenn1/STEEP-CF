@@ -5,3 +5,4 @@
 
 # Output graphics files
 *.jpg
+.DS_Store
