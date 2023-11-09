@@ -27,7 +27,7 @@ files <- list.files(path = "tempest_data", pattern = "PNNL_1", full.names = T) #
 # Define function to read in teros data and format
 read_teros <- function(filename){
 
-  message(paste("processing", filename))
+  message("processing", filename)
 
   read_delim(filename, col_names = T, skip = 1) %>%
     slice(3:n()) %>%
@@ -63,7 +63,8 @@ t_raw %>%
   group_by(variable, Date) %>%
   summarise(Value = mean(value, na.rm = TRUE)) %>%
   filter(Date >= "2022-01-01", Date <= "2022-12-31") %>%
-  mutate(DOY = yday(Date)) -> teros_2022
+  mutate(DOY = yday(Date)) %>%
+  rename(Variable = variable) -> teros_2022
 
 # ---------------- Graph to check ----------------
 
