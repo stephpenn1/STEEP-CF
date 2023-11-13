@@ -6,5 +6,7 @@
 # Output graphics files
 *.jpg
 
-# OS files
 .DS_Store
+
+/tempest_data
+
