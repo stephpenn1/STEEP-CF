@@ -6,7 +6,7 @@ date: "2023-11-13"
 
 ```{r setup, include=FALSE}
 
-pacman::p_load(dplyr, FME, tidyr, ggplot2, relaimpo)
+pacman::p_load(dplyr, FME, tidyr, ggplot2, relaimpo, readr)
 theme_set(theme_bw())
 
 # Define constants
@@ -17,7 +17,8 @@ NUM_RUNS <- 100
 tmp_forcing_data <- read_csv("tmp_forcing_data.csv")
 
 # Read in parameters - Described in Table A1 of Abramoff et al. (2021)
-parameters.file <- read.table("./input/model input/soilpara_in_fit.txt")
+parameters.file <- read.table("./input/model input/soilpara_in_fit.txt") %>% 
+  add_row(V1 = "param_pc", V2 = 0.86) # quick fix, add back in param_pc since were using the example file
 parameters <- as.list(parameters.file$V2)
 names(parameters) <- parameters.file$V1
 
@@ -30,10 +31,10 @@ generate_params <- function(run_numbers){
   nruns <- length(run_numbers)
   tibble(
     run_number = run_numbers,
-    param_pH = rnorm(n = nruns, mean = 5.3, sd = 0.053), # pH, adjusted to average of site values
-    param_bulkd = rnorm(n = nruns, mean = 1000, sd = 100), # bulk density in kg soil m-3
-    param_pc = rnorm(n = nruns, mean = 0.86, sd = 0.086), # slope of mineral C - clay relationship from Georgiou et al. in review
-    param_claysilt = rnorm(n = nruns, mean = 80, sd = 8)  # clay and silt content in %
+    #numbers taken from SoilGrids at the 2-15cm depth
+    param_pH = rnorm(n = nruns, mean = 4.9, sd = 0.6), # pH, adjusted to average of site values
+    param_bulkd = rnorm(n = nruns, mean = 1280, sd = 90), # bulk density in kg soil m-3
+    param_claysilt = rnorm(n = nruns, mean = 66.6, sd = 5)  # clay and silt content in %
   )
 }
 
@@ -55,11 +56,20 @@ runlist_final <- c(runlist, params_fixed)
 
 ```{r parameters, include=FALSE}
 
+tibble(
+  param_pH_median = 4.8, param_pH_sd = 0.048,
+  param_bulkd_median = 1480, param_bulkd_sd = 100,
+  param_claysilt_median = 52, param_claysilt_sd = 5) %>% 
+  pivot_longer(cols = is.numeric, names_to = c("parameter", ".value"), 
+               names_pattern = "(.*)_(.*)") -> param_stats
+
 bind_rows(runlist) %>% 
-  pivot_longer(cols = !run_number, names_to = "param", values_to = "value") %>% 
-  ggplot(aes(x = run_number, y = value)) + 
-  geom_point() + 
-  facet_wrap(~param, scales = "free")
+  pivot_longer(cols = !run_number, names_to = "parameter", values_to = "value") %>% 
+  ggplot(aes(x = value, fill = parameter, color = parameter)) + 
+  geom_density() + 
+  facet_wrap(~parameter, scales = "free", 
+             labeller = as_labeller(c(param_bulkd = "Bulk Density (kg/m3)", param_claysilt = "%claysilt (%)",
+                                      param_pc = "pc (?)", param_pH = "pH (unitless)"))) + theme_minimal()
 
 ```
 
@@ -110,7 +120,7 @@ ribbon_plot_data <- model_output %>%
 ribbon_plot <- ribbon_plot_data %>%
   ggplot(aes(x = time, fill = metric)) +
   geom_ribbon(aes(ymin = min, ymax = max),  alpha = 0.5) +
-  geom_line(aes(y = median, color = metric), linewidth = 1) +
+  geom_line(aes(y = median, color = metric)) +
   facet_wrap(~metric, scales = "free_y") +
   scale_color_brewer(palette = "BrBG") +
   scale_fill_brewer(palette = "BrBG") +
@@ -118,7 +128,7 @@ ribbon_plot <- ribbon_plot_data %>%
        y = "Units?") +
   # vertical lines show with NPP starts and stops
   geom_vline(xintercept = c(168, 260), linetype = 2) +
-  theme_bw() ; ribbon_plot
+  theme_bw()
 
 # ggsave("./figures/model_outputs.jpg", height = 6, width = 9)
 
