@@ -11,10 +11,20 @@ theme_set(theme_bw())
 
 # Define constants
 NUM_YEARS <- 1
-NUM_RUNS <- 100                                                                                                               
+NUM_RUNS <- 100                                                                                                     
+
+# Define palette
+# output_palette <- c("AGG" = "#543005", "CO2" = "#8C510A", "MIC" = "#35978F", 
+#                     "LMWC" = "#1E3C6E", "POM" = "#2A6A7F", "MAOM" = "#704108")
 
 # Read forcing data
 tmp_forcing_data <- read_csv("tmp_forcing_data.csv")
+
+tmp_forcing_data %>% 
+  pivot_longer(cols = !DOY) %>% 
+  ggplot(aes(x = DOY, y = value)) +
+  geom_line(color = "#35978F") + facet_wrap(~name, scales = "free") +
+  theme_minimal(base_size = 24)
 
 # Read in parameters - Described in Table A1 of Abramoff et al. (2021)
 parameters.file <- read.table("./input/model input/soilpara_in_fit.txt") %>% 
@@ -55,26 +65,26 @@ runlist_final <- c(runlist, params_fixed)
 ```
 
 ```{r parameters, include=FALSE}
-
 tibble(
-  param_pH_median = 4.8, param_pH_sd = 0.048,
-  param_bulkd_median = 1480, param_bulkd_sd = 100,
-  param_claysilt_median = 52, param_claysilt_sd = 5) %>% 
+  param_pH_median = 4.9, param_pH_sd = 0.6,
+  param_bulkd_median = 1280, param_bulkd_sd = 90,
+  param_claysilt_median = 66.6, param_claysilt_sd = 5) %>% 
   pivot_longer(cols = is.numeric, names_to = c("parameter", ".value"), 
                names_pattern = "(.*)_(.*)") -> param_stats
 
 bind_rows(runlist) %>% 
   pivot_longer(cols = !run_number, names_to = "parameter", values_to = "value") %>% 
-  ggplot(aes(x = value, fill = parameter, color = parameter)) + 
-  geom_density() + 
+  ggplot() + 
+  geom_vline(data = param_stats, aes(xintercept = median), color = "grey40") +
+  geom_density(aes(x = value), fill = "#A7DCD0", color = "#35978F", alpha = 0.7) + 
   facet_wrap(~parameter, scales = "free", 
              labeller = as_labeller(c(param_bulkd = "Bulk Density (kg/m3)", param_claysilt = "%claysilt (%)",
-                                      param_pc = "pc (?)", param_pH = "pH (unitless)"))) + theme_minimal()
+                                      param_pc = "pc (?)", param_pH = "pH (unitless)"))) + 
+  theme_minimal(base_size = 24)
 
 ```
 
 ```{r run-analysis, include=FALSE}
-
 # Run the model
 output <- list()
 for(r in runs){
@@ -105,6 +115,7 @@ model_output <- bind_rows(output) %>% as_tibble()
 
 # Plot just the model outputs as a ribbon plot
 # Clean up data
+
 ribbon_plot_data <- model_output %>%
   pivot_longer(cols = c(POM, LMWC, AGG, MIC, MAOM, CO2),
                names_to = "metric",
@@ -116,21 +127,38 @@ ribbon_plot_data <- model_output %>%
             median = median(values),
             .groups = "drop")
 
+#calculate co2 emission rate
+ribbon_plot_data %>% 
+  filter(metric == "CO2") -> co2
+
+deltaCO2 <- tibble(time = co2$time,
+                   metric = "CO2_emissions",
+                   sd = c(NA, diff(co2$sd)), 
+                   min = c(NA, diff(co2$min)),
+                   max = c(NA, diff(co2$max)),
+                   median = c(NA, diff(co2$median)))
+
+# plot co2 emissions
+ggplot(deltaCO2, aes(x = time)) +
+  geom_ribbon(aes(ymin = min, ymax = max), fill = "#1E3C6E", alpha = 0.5) +
+  geom_line(aes(y = median), color = "#1E3C6E") +
+  labs(x = "Time (days)", y = expression(paste("CO2 Emissions (gC ", m^{-2}, d^{-1}, ")"))) +
+  theme_minimal(base_size = 24)
+
 # Plot
-ribbon_plot <- ribbon_plot_data %>%
-  ggplot(aes(x = time, fill = metric)) +
-  geom_ribbon(aes(ymin = min, ymax = max),  alpha = 0.5) +
-  geom_line(aes(y = median, color = metric)) +
+ribbon_plot_data %>%
+  ggplot(aes(x = time)) +
+  geom_ribbon(aes(ymin = min, ymax = max), fill = "#1E3C6E", alpha = 0.5) +
+  geom_line(aes(y = median), color = "#1E3C6E") +
   facet_wrap(~metric, scales = "free_y") +
-  scale_color_brewer(palette = "BrBG") +
-  scale_fill_brewer(palette = "BrBG") +
-  labs(x = "Time (days)",
-       y = "Units?") +
-  # vertical lines show with NPP starts and stops
-  geom_vline(xintercept = c(168, 260), linetype = 2) +
-  theme_bw()
+  labs(x = "Time (days)", y = expression(paste("gC ", m^{-2}))) +
+  theme_minimal()
 
 # ggsave("./figures/model_outputs.jpg", height = 6, width = 9)
+```
+
+
+```{r rel-importance, include=FALSE}
 
 # Calculate relative importance
 # Define function
@@ -189,18 +217,18 @@ for(p in out_params){
 }
 
 # Plot relative importance
-relaimpo_plot <- bind_rows(out) %>%
+bind_rows(out) %>%
   ggplot(aes(x = time, y = value, fill = output)) +
   geom_area() +
   facet_wrap(~source) +
-  labs(x = "Timestep",
-       y = "Relative importance for total CO2",
+  labs(x = "Time (days)",
+       y = "Relative Importance",
        fill = "Parameter") +
   # Adjust the zoom as needed - need to zoom out with longer runs
-  coord_cartesian(ylim = c(0.65, 1.0)) +
+  coord_cartesian(ylim = c(0.99, 1.0)) +
   scale_fill_manual(values = pals::brewer.set2(n = 5)) +
   # vertical lines show with NPP starts and stops
-  geom_vline(xintercept = c(168, 260), linetype = 2) +
-  theme_bw() ; relaimpo_plot
+  #geom_vline(xintercept = c(168, 260), linetype = 2) +
+  theme_minimal(base_size = 24)
 
 ```
