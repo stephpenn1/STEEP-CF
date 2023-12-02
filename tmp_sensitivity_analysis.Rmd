@@ -40,7 +40,7 @@ tmp_forcing_data %>%
   geom_line(color = "#35978F", linewidth = 0.7) + 
   facet_wrap(~name, scales = "free", labeller = labeller(name = as_labeller(force_names, label_parsed))) +
   labs(x = "Day of Year", y = "") +
-  theme_minimal(base_size = 24)
+  theme_minimal(base_size = 24) -> forcing_timeseries
 
 # Read in parameters - Described in Table A1 of Abramoff et al. (2021)
 parameters.file <- read.table("./input/model input/soilpara_in_fit.txt") %>% 
@@ -52,7 +52,7 @@ names(parameters) <- parameters.file$V1
 source("./functions/run_functions.R") # R script that contains calls to run model
 source("./functions/derivs_V2_MM.R") # The official version of Millennial V2
 
-set.seed(15)
+set.seed(17)
 
 # Create a runlist to vary select parameters
 generate_params <- function(run_numbers){
@@ -79,7 +79,6 @@ for(p in names(parameters)){
 # Combine the two lists
 runlist_final <- c(runlist, params_fixed)
 
-
 ```
 
 ```{r parameters, include=FALSE}
@@ -98,7 +97,7 @@ bind_rows(runlist) %>%
   facet_wrap(~parameter, scales = "free", 
              labeller = labeller(parameter = as_labeller(param_units, label_parsed))) + 
   labs(x = "Value", y = "Density") +
-  theme_minimal(base_size = 24)
+  theme_minimal(base_size = 24) -> param_dist
 
 ```
 
@@ -155,14 +154,12 @@ ribbon_plot_data %>%
   facet_wrap(~metric, scales = "free_y", ncol = 2, labeller = labeller(metric = as_labeller(pools, label_parsed))) +
   labs(x = "Time (days)", y = "") +
   # y = expression(paste("gC ", m^{-2}))
-  theme_minimal(base_size = 24)
+  theme_minimal(base_size = 24) -> model_output
 
-# ggsave("./figures/model_outputs.jpg", height = 6, width = 9)
 ```
 
 
 ```{r rel-importance, include=FALSE}
-
 # Calculate relative importance
 # Define function
 calc_relimp <- function(x) {
@@ -213,7 +210,12 @@ for(p in out_params){
     # ...and create a new column to preserve its name
     mutate(name = p)
   # Split the data up by day to calculate variance for each timestep
-  imp <- split(importance_test_filter, list(importance_test_filter$time))
+  
+```
+
+
+```{r rel-importance, include=FALSE}
+imp <- split(importance_test_filter, list(importance_test_filter$time))
   # (except for the first day, where outputs = 1 and 0;
   # note this can be changed in the "run model" function)
   out[[p]] <- lapply(imp[-1], FUN = calc_relimp) %>% bind_rows()
@@ -233,6 +235,19 @@ bind_rows(out) %>%
   # vertical lines show with NPP starts and stops
   #geom_vline(xintercept = c(168, 260), linetype = 2) +
   theme_minimal(base_size = 24) +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") -> relimp
 
 ```
+
+```{r save plots, eval=FALSE, include=FALSE}
+
+ggsave("./figures/AGU23/relimp.jpg", plot = relimp, height = 9, width = 15, dpi = "retina")
+
+ggsave("./figures/AGU23/model_output.jpg", plot = model_output, height = 9, width = 15, dpi = "retina")
+
+ggsave("./figures/AGU23/param_dist.jpg", plot = param_dist, height = 6, width = 15, dpi = "retina")
+
+ggsave("./figures/AGU23/forcing_timeseries.jpg", plot = forcing_timeseries, height = 6, width = 15, dpi = "retina")
+
+```
+
