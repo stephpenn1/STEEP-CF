@@ -40,7 +40,7 @@ tmp_forcing_data %>%
   geom_line(color = "#35978F", linewidth = 0.7) + 
   facet_wrap(~name, scales = "free", labeller = labeller(name = as_labeller(force_names, label_parsed))) +
   labs(x = "Day of Year", y = "") +
-  theme_minimal(base_size = 24) -> forcing_timeseries
+  theme_minimal(base_size = 24) -> p_forcing_timeseries
 
 # Read in parameters - Described in Table A1 of Abramoff et al. (2021)
 parameters.file <- read.table("./input/model input/soilpara_in_fit.txt") %>% 
@@ -97,7 +97,7 @@ bind_rows(runlist) %>%
   facet_wrap(~parameter, scales = "free", 
              labeller = labeller(parameter = as_labeller(param_units, label_parsed))) + 
   labs(x = "Value", y = "Density") +
-  theme_minimal(base_size = 24) -> param_dist
+  theme_minimal(base_size = 24) -> p_param_dist
 
 ```
 
@@ -127,7 +127,8 @@ for(r in runs){
 }
 
 # Combine data
-model_output <- bind_rows(output) %>% as_tibble() %>% 
+model_output <- bind_rows(output) %>% 
+  as_tibble() %>% 
   mutate(CO2_emissions = c(NA, diff(CO2))) %>% #calculate co2 emission rate
   dplyr::select(-CO2)
 
@@ -154,7 +155,7 @@ ribbon_plot_data %>%
   facet_wrap(~metric, scales = "free_y", ncol = 2, labeller = labeller(metric = as_labeller(pools, label_parsed))) +
   labs(x = "Time (days)", y = "") +
   # y = expression(paste("gC ", m^{-2}))
-  theme_minimal(base_size = 24) -> model_output
+  theme_minimal(base_size = 24) -> p_model_output
 
 ```
 
@@ -210,12 +211,7 @@ for(p in out_params){
     # ...and create a new column to preserve its name
     mutate(name = p)
   # Split the data up by day to calculate variance for each timestep
-  
-```
-
-
-```{r rel-importance, include=FALSE}
-imp <- split(importance_test_filter, list(importance_test_filter$time))
+  imp <- split(importance_test_filter, list(importance_test_filter$time))
   # (except for the first day, where outputs = 1 and 0;
   # note this can be changed in the "run model" function)
   out[[p]] <- lapply(imp[-1], FUN = calc_relimp) %>% bind_rows()
@@ -235,19 +231,19 @@ bind_rows(out) %>%
   # vertical lines show with NPP starts and stops
   #geom_vline(xintercept = c(168, 260), linetype = 2) +
   theme_minimal(base_size = 24) +
-  theme(legend.position = "bottom") -> relimp
+  theme(legend.position = "bottom") -> p_relimp
 
 ```
 
 ```{r save plots, eval=FALSE, include=FALSE}
 
-ggsave("./figures/AGU23/relimp.jpg", plot = relimp, height = 9, width = 15, dpi = "retina")
+ggsave("./figures/AGU23/relimp.jpg", plot = p_relimp, height = 9, width = 15, dpi = "retina")
 
-ggsave("./figures/AGU23/model_output.jpg", plot = model_output, height = 9, width = 15, dpi = "retina")
+ggsave("./figures/AGU23/model_output.jpg", plot = p_model_output, height = 9, width = 15, dpi = "retina")
 
-ggsave("./figures/AGU23/param_dist.jpg", plot = param_dist, height = 6, width = 15, dpi = "retina")
+ggsave("./figures/AGU23/param_dist.jpg", plot = p_param_dist, height = 6, width = 15, dpi = "retina")
 
-ggsave("./figures/AGU23/forcing_timeseries.jpg", plot = forcing_timeseries, height = 6, width = 15, dpi = "retina")
+ggsave("./figures/AGU23/forcing_timeseries.jpg", plot = p_forcing_timeseries, height = 6, width = 15, dpi = "retina")
 
 ```
 

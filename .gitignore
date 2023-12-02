@@ -3,6 +3,9 @@
 .RData
 .Ruserdata
 
+# Rmarkdown output
+*.html
+
 # Output graphics files
 *.jpg
 
