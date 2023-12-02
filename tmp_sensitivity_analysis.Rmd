@@ -27,7 +27,7 @@ pools <- c("AGG" = "Aggregate~C~(gC~m^-2)",
            "MAOM" = "Mineral~associated~organic~matter~(gC~m^-2)")
 
 param_names <- c("param_bulkd" = "Bulk Density", "param_claysilt" = "ClaySilt", "param_pH" = "pH")
-force_names <- c("forc_npp" = "Net~Primary~Production~(gC~m^2)", "forc_st" = "Soil~Temperature~(°C)", "forc_sw" = "Soil~Moisture~(m^3m^-3)")
+force_names <- c("forc_npp" = "Net~Primary~Production~(gC~m^2)", "forc_st" = "Soil~Temperature~'(°C)'", "forc_sw" = "Soil~Moisture~(m^3~m^-3)")
 
 param_units <- c("param_bulkd" = "Bulk~Density~(kg~m^3)", "param_claysilt" = "ClaySilt~'(%)'", "param_pH" = "pH~(unitless)")
 
