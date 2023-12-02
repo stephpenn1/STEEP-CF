@@ -226,7 +226,7 @@ bind_rows(out) %>%
        y = "Relative Importance",
        fill = "Parameter") +
   # Adjust the zoom as needed - need to zoom out with longer runs
-  coord_cartesian(ylim = c(0.99, 1.0)) +
+  coord_cartesian(ylim = c(0.97, 1.0)) +
   scale_fill_manual(values = pals::brewer.set2(n = 5), labels = param_names) +
   # vertical lines show with NPP starts and stops
   #geom_vline(xintercept = c(168, 260), linetype = 2) +
